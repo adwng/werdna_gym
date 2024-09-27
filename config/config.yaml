@@ -1,0 +1,7 @@
+robot_model: "model/werdna_bullet.urdf"
+
+connect_type: "GUI"
+
+algo: "PPO"
+
+filename: 'ppo_werdna_stand-v1'
