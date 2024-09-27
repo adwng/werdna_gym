@@ -2,6 +2,8 @@ robot_model: "model/werdna_bullet.urdf"
 
 connect_type: "GUI"
 
-algo: "PPO"
+algo: "DQN"
 
-filename: 'ppo_werdna_stand-v1'
+filename: 'dqn_werdna_balance-v1'
+
+env: 'werdna_balance'

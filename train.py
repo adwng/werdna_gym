@@ -14,21 +14,26 @@ def main():
     connect_type = config['connect_type']
     algo = config['algo']
     filename = config['filename']
+    env_name = config['env']
 
     # Print each variable
     print(f"Robot Model: {robot_model}")
     print(f"Connect Type: {connect_type}")
     print(f'Algorithm Used: {algo}')
     print(f"Zip File: {filename}")
+    print(f"Environment: {env_name}")
 
-    env = WerdnaStandEnv(modelType=robot_model, render_mode=connect_type)
-
+    if env_name == 'werdna_balance':
+        env = WerdnaEnv(modelType=robot_model, render_mode=connect_type)
+    elif env_name == 'werdna_stand':
+        env = WerdnaStandEnv(modelType=robot_model, render_mode=connect_type)
+        
     if algo == 'DQN':
         model=DQN("MlpPolicy", env, verbose=1)
-        model.learn(total_timesteps= 1000000)
+        model.learn(total_timesteps= 1000000, log_interval=4)
     elif algo == 'PPO':
         model = PPO("MlpPolicy", env, verbose=1)
-        model.learn(total_timesteps= 1000000, log_interval=4)
+        model.learn(total_timesteps= 1000000)
 
     # Create the results directory if it doesn't exist
     results_dir = "results"

@@ -16,11 +16,7 @@ class WerdnaEnv(gym.Env):
         elif render_mode == 'DIRECT':
             p.connect(p.DIRECT)
 
-        self.action_space = spaces.Box(
-            low=np.array([-1]),  # Lower bound for both left and right wheel
-            high=np.array([1]),   # Upper bound for both left and right wheel
-            dtype=np.float32
-        )
+        self.action_space = spaces.Discrete(9)
 
         # Observation space: [pitch, pitch_rate, wheel velocity, x position]
         self.observation_space = spaces.Box(
@@ -63,46 +59,60 @@ class WerdnaEnv(gym.Env):
         left_wheel_joint_id, _ = self.get_joint('left_wheel_joint')
         right_wheel_joint_id, _ = self.get_joint('right_wheel_joint')
         
-        vt = 10 * action[0]  # Scaled to [-15, 15] for higher velocity control
+        dv = 0.1
+        deltav = [-5.*dv,-2.5*dv, -1.*dv, -0.5*dv, 0, 0.5*dv, 1.*dv,2.5*dv, 5.*dv][action]
+        vt = self.vt + deltav
+        self.vt = vt
 
         # Set wheel velocities
         p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=vt)
         p.setJointMotorControl2(self.robotID, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=vt)
 
-        # Keep the hips and knees stationary
-        for joint_name in ['left_hip_joint', 'left_knee_joint', 'right_hip_joint', 'right_knee_joint']:
-            joint_id, _ = self.get_joint(joint_name)
-            p.setJointMotorControl2(self.robotID, joint_id, p.POSITION_CONTROL, targetPosition=0)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def reset(self, seed=None):
-        p.resetSimulation()
-        p.setTimeStep(0.01)
-        p.setGravity(0, 0, -9.81)
-        self.current_time_step = 0
-        self.prev_pitch = 0
+
         if seed is not None:
             self.seed(seed)
+
+        p.resetSimulation()
+        p.setTimeStep(0.02)
+        p.setGravity(0, 0, -9.81)
+
+        self.current_time_step = 0
+        self.prev_pitch = 0
+        self.vt = 0
+
         robotPath = pybullet_data.getDataPath()
         self.planeid = p.loadURDF(os.path.join(robotPath, "plane.urdf"), basePosition=[0, 0, 0])
         self.robotID = p.loadURDF(self.modelType, basePosition=[0, 0, 0.0855])
         
         observation = self.get_obs()
         info = self.get_info()
+        
+        # Keep the hips and knees stationary
+        for joint_name in ['left_hip_joint', 'left_knee_joint', 'right_hip_joint', 'right_knee_joint']:
+            joint_id, _ = self.get_joint(joint_name)
+            p.setJointMotorControl2(self.robotID, joint_id, p.POSITION_CONTROL, targetPosition=0)
+
         return observation, info
 
     def step(self, action):
-        p.stepSimulation()
+
         self.moveRobot(action)
+        p.stepSimulation()
+
         observations = self.get_obs()
         info = self.get_info()
         done = self.check_done()
         truncated = self.check_terminal_state()
         reward = self.calculate_reward()
+
         self.current_time_step += 1
+
         return observations, reward, done, truncated, info
 
     def get_obs(self):
@@ -114,8 +124,9 @@ class WerdnaEnv(gym.Env):
         pitch_rate = pitch - self.prev_pitch
         self.prev_pitch = pitch
         left_wheel_velocity = self.joint_data[self.get_joint('left_wheel_joint')[0]]['velocity']
-        velocity = left_wheel_velocity  # Average velocity of both wheels (assuming symmetric)
-        x_position = robot_position[0]  # Track x position for reward calculation
+        right_wheel_velocity = self.joint_data[self.get_joint('right_wheel_joint')[0]]['velocity']
+        velocity = (left_wheel_velocity + right_wheel_velocity)/2  # Average velocity of both wheels 
+        x_position = (left_wheel_velocity + right_wheel_velocity)/0.4855
         return np.array([pitch, pitch_rate, x_position, velocity], dtype=np.float32)
 
     def get_info(self):
@@ -123,23 +134,35 @@ class WerdnaEnv(gym.Env):
         return {'position': robot_position}
 
     def calculate_reward(self):
+
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch = euler_angles[1]
-        pitch_rate = self.prev_pitch
+
+        pitch_rate = pitch - self.prev_pitch
+
         velocity = (self.joint_data[self.get_joint('left_wheel_joint')[0]]['velocity']
                     + self.joint_data[self.get_joint('right_wheel_joint')[0]]['velocity']) / 2
+        
         # Encourage the robot to stay upright and maintain stable velocity
-        reward = (1 - abs(pitch) * 0.2) + (1 - abs(pitch_rate) * 0.2) + (1 - abs(velocity) * 0.01)
+        reward = (1 - abs(0 - pitch))*0.01  # Limit pitch error impact
+        reward += min(max(pitch_rate, -0.5), 0.5) * 0.01           # Slightly increase pitch rate influence
+        reward += min(max(velocity, -5), 5) * 0.005                # Slightly increase velocity influence
+        # print(f'Reward: {reward}')
+
         return reward
 
     def check_terminal_state(self):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch_deg = np.rad2deg(euler_angles[1])
-        max_distance = 0.1
-        distance_from_origin = np.linalg.norm(np.array(robot_position[:2]))
-        if abs(pitch_deg) >= 20 or distance_from_origin >= max_distance:
+
+        max_distance = 0.01
+        distance_from_origin = robot_position[0]
+
+        if abs(pitch_deg) >= 20 and distance_from_origin >= max_distance:
+            return True
+        if abs(pitch_deg) >=22:
             return True
         return False
 
@@ -148,9 +171,12 @@ class WerdnaEnv(gym.Env):
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch = euler_angles[1]
 
-        if self.current_time_step >= self.max_time_step and abs(np.rad2deg(pitch) < 10):
+        if self.current_time_step >= self.max_time_step and abs(np.rad2deg(pitch) < 15):
             return True
         return False
+    
+    def render(self, mode='human', close=False):
+        pass
 
     def close(self):
         p.disconnect()

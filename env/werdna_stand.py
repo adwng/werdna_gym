@@ -187,13 +187,15 @@ class WerdnaStandEnv(gym.Env):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch_deg = np.rad2deg(euler_angles[1])
-        max_distance = 0.1
-        distance_from_origin = np.linalg.norm(np.array(robot_position[:2]))
-        if abs(pitch_deg) >= 30:
-            # print(pitch_deg)
+
+        max_distance = 0.01
+        distance_from_origin = robot_position[0]
+
+        if abs(pitch_deg) >= 20 and distance_from_origin > max_distance:
             return True
-        else:
-            return False
+        if abs(pitch_deg) >=23:
+            return True
+        return False
 
     def check_done(self):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
@@ -201,11 +203,11 @@ class WerdnaStandEnv(gym.Env):
         pitch = euler_angles[1]
 
         if self.current_time_step >= self.max_time_step and abs(np.rad2deg(pitch) < 15):
-            print('Done')
             return True
         return False
 
     def render(self, mode='human', close=False):
         pass
+    
     def close(self):
         p.disconnect()
