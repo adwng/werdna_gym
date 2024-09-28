@@ -16,7 +16,7 @@ class WerdnaEnv(gym.Env):
         elif render_mode == 'DIRECT':
             p.connect(p.DIRECT)
 
-        self.action_space = spaces.Discrete(9)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
         # Observation space: [pitch, pitch_rate, wheel velocity, x position]
         self.observation_space = spaces.Box(
@@ -59,10 +59,7 @@ class WerdnaEnv(gym.Env):
         left_wheel_joint_id, _ = self.get_joint('left_wheel_joint')
         right_wheel_joint_id, _ = self.get_joint('right_wheel_joint')
         
-        dv = 0.1
-        deltav = [-5.*dv,-2.5*dv, -1.*dv, -0.5*dv, 0, 0.5*dv, 1.*dv,2.5*dv, 5.*dv][action]
-        vt = self.vt + deltav
-        self.vt = vt
+        vt = action*10
 
         # Set wheel velocities
         p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=vt)
@@ -157,12 +154,9 @@ class WerdnaEnv(gym.Env):
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch_deg = np.rad2deg(euler_angles[1])
 
-        max_distance = 0.01
-        distance_from_origin = robot_position[0]
-
-        if abs(pitch_deg) >= 20 and distance_from_origin >= max_distance:
+        if self.current_time_step >= self.max_time_step or abs(np.rad2deg(pitch_deg) > 25):
             return True
-        if abs(pitch_deg) >=22:
+        if abs(np.rad2deg(pitch_deg) > 23):
             return True
         return False
 

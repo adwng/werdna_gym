@@ -17,12 +17,12 @@ class WerdnaStandEnv(gym.Env):
         elif render_mode == 'DIRECT':
             p.connect(p.DIRECT)
 
-        self.action_space = spaces.Discrete(9)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
-        # Observation space: [pitch, pitch_rate, wheel velocity, x position]
+        # Observation space: [pitch, pitch_rate]
         self.observation_space = spaces.Box(
-            np.array([-np.pi, -15, -np.inf, -15]), 
-            np.array([np.pi, 15, np.inf, 15])
+            np.array([-np.pi, -np.pi, -np.inf, -np.inf]), 
+            np.array([np.pi, np.pi, np.inf, np.inf])
         )
 
         self.modelType = modelType
@@ -80,10 +80,7 @@ class WerdnaStandEnv(gym.Env):
         left_wheel_joint_id, _ = self.get_joint('left_wheel_joint')
         right_wheel_joint_id, _ = self.get_joint('right_wheel_joint')
         
-        dv = 0.1
-        deltav = [-5.*dv,-2.5*dv, -1.*dv, -0.5*dv, 0, 0.5*dv, 1.*dv,2.5*dv, 5.*dv][action]
-        vt = self.vt + deltav
-        self.vt = vt
+        vt = action*10
 
         # print(f'Speed: {vt}')
 
@@ -161,8 +158,24 @@ class WerdnaStandEnv(gym.Env):
         return np.array([pitch, pitch_rate, x_position, velocity], dtype=np.float32)
 
     def get_info(self):
-        robot_position, _ = p.getBasePositionAndOrientation(self.robotID)
-        return {'position': robot_position}
+        _, left_hip_data = self.get_joint('left_hip_joint')
+        _, right_hip_data = self.get_joint('right_hip_joint')
+        _, left_knee_data = self.get_joint('left_knee_joint')
+        _, right_knee_data = self.get_joint('right_knee_joint')
+
+        left_hip_position = left_hip_data['position']
+        right_hip_position = right_hip_data['position']
+        left_knee_position = left_knee_data['position']
+        right_knee_position = right_knee_data['position']
+
+        # Return as a dictionary
+        return {
+            'left_hip_position': left_hip_position,
+            'right_hip_position': right_hip_position,
+            'left_knee_position': left_knee_position,
+            'right_knee_position': right_knee_position
+        }
+
 
     def calculate_reward(self):
 
@@ -176,9 +189,8 @@ class WerdnaStandEnv(gym.Env):
                     + self.joint_data[self.get_joint('right_wheel_joint')[0]]['velocity']) / 2
         
         # Encourage the robot to stay upright and maintain stable velocity
-        reward = (1 - abs(0 - pitch))*0.01  # Limit pitch error impact
-        reward += min(max(pitch_rate, -0.5), 0.5) * 0.01           # Slightly increase pitch rate influence
-        reward += min(max(velocity, -5), 5) * 0.005                # Slightly increase velocity influence
+        reward = (1 - abs(0 - pitch))*0.01  
+        reward += min(max(pitch_rate, -0.5), 0.5) * 0.01                         
         # print(f'Reward: {reward}')
 
         return reward
@@ -191,18 +203,17 @@ class WerdnaStandEnv(gym.Env):
         max_distance = 0.01
         distance_from_origin = robot_position[0]
 
-        if abs(pitch_deg) >= 20 and distance_from_origin > max_distance:
+        if abs(pitch_deg) > 45:
             return True
-        if abs(pitch_deg) >=23:
-            return True
-        return False
+        else:
+            return False
 
     def check_done(self):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch = euler_angles[1]
 
-        if self.current_time_step >= self.max_time_step and abs(np.rad2deg(pitch) < 15):
+        if self.current_time_step > 500 and abs(np.rad2deg(pitch) < 45):
             return True
         return False
 

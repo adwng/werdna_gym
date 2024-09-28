@@ -1,11 +1,13 @@
 import os
 import time
-from stable_baselines3 import PPO, DQN
+from stable_baselines3 import PPO, DQN, DDPG
 from utils import parser as p
 from env.werdna_balance import WerdnaEnv
 from env.werdna_stand import WerdnaStandEnv
 
 def main():
+
+    total_reward = 0
 
     config = p.parser("config/config.yaml")
 
@@ -23,14 +25,16 @@ def main():
     print(f"Zip File: {complete_filename}")
 
     if env_name == 'werdna_balance':
-        env = WerdnaEnv(modelType=robot_model, render_mode=connect_type)
+        env = WerdnaEnv(modelType=robot_model, render_mode='GUI')
     elif env_name == 'werdna_stand':
-        env = WerdnaStandEnv(modelType=robot_model, render_mode=connect_type)
+        env = WerdnaStandEnv(modelType=robot_model, render_mode='GUI')
 
     if algo == 'DQN':
         model=DQN.load(complete_filename)
     elif algo == 'PPO':
         model = PPO.load(complete_filename) 
+    elif algo == 'DDPG':
+        model = DDPG.load(complete_filename)
 
     # Set the environment for the model
     model.set_env(env)

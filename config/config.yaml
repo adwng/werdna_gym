@@ -1,9 +1,9 @@
 robot_model: "model/werdna_bullet.urdf"
 
-connect_type: "GUI"
+connect_type: "DIRECT"
 
-algo: "DQN"
+algo: "DDPG"
 
-filename: 'dqn_werdna_balance-v1'
+filename: 'ddpg_werdna_stand-v1'
 
-env: 'werdna_balance'
+env: 'werdna_stand'
