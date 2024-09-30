@@ -4,10 +4,15 @@ import matplotlib.pyplot as plt
 # Constants
 L1 = L2 = 0.1
 
-def invkev(f, x):
-    knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - f**2) / (2 * L1 * L2))
-    hip_theta = np.arcsin(x / f) - np.arccos((L1**2 + f**2 - L2**2) / (2 * L1 * f))
-    return knee_theta, hip_theta
+def inverse_kinematics(height=0, displacement=0):
+    if height != 0:
+        L1 = L2 = 0.1
+        knee_theta =  np.arccos((L1**2 + L2**2 - height**2) / (2 * L1 * L2))
+        hip_theta = np.arcsin(displacement / height) - np.arccos((L1**2 + height**2 - L2**2) / (2 * L1 * height)) 
+
+        return hip_theta, knee_theta
+    else:
+        return 0, 0
 
 def rad2deg(theta):
     return theta * (180 / np.pi)
@@ -23,7 +28,7 @@ def main():
     height = min(height, 0.1)
     displacement = min(displacement, 0.1)
 
-    angle_knee, angle_hip = invkev(height, displacement)
+    angle_hip, angle_knee = inverse_kinematics(height, displacement)
 
     # Define target positions
     target_positions = [angle_hip, angle_knee, -angle_hip, -angle_knee]

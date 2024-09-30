@@ -41,6 +41,8 @@ def extract_joint_info(robot_id):
             'velocity': joint_velocity
         }
 
+        # print(joint_info)
+
     return joint_data
 
 def teleop():
@@ -52,7 +54,7 @@ def teleop():
     right_knee_joint_id, right_knee_joint_info = get_joint('right_knee_joint')
 
     max_wheel_velocity = 10.0
-    max_height = 0.1
+    max_height = 0.10
     max_displacement = 0.05
 
     keys = p.getKeyboardEvents()
@@ -110,8 +112,8 @@ def teleop():
     p.setJointMotorControl2(robot_id, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=right_wheel_velocity)
 
     # Calculate knee and hip angles using inverse kinematics
-    left_knee, left_hip = inverse_kinematics(left_leg_position, left_leg_displacement)
-    right_knee, right_hip = inverse_kinematics(right_leg_position, right_leg_displacement)
+    left_hip, left_knee = inverse_kinematics(left_leg_position, left_leg_displacement)
+    right_hip, right_knee = inverse_kinematics(right_leg_position, right_leg_displacement)
 
     # Set knee and hip joint positions
     p.setJointMotorControl2(robot_id, left_knee_joint_id, p.POSITION_CONTROL, targetPosition=left_knee, force = 10.0, maxVelocity = 2.0)
@@ -120,24 +122,34 @@ def teleop():
     p.setJointMotorControl2(robot_id, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=right_hip, force = 10.0, maxVelocity = 2.0)
     
 
-def inverse_kinematics(f=0, x=0):
-    """
-    Performs inverse kinematics calculations to get knee and hip angles.
+# def inverse_kinematics(f=0, x=0):
+#     """
+#     Performs inverse kinematics calculations to get knee and hip angles.
     
-    Args:
-        f: The target foot position (height).
-        x: The x-axis displacement (currently unused).
+#     Args:
+#         f: The target foot position (height).
+#         x: The x-axis displacement (currently unused).
         
-    Returns:
-        A tuple (knee_theta, hip_theta) representing the joint angles.
-    """
-    L1 = L2 = 0.1
-    if f > 0:
-        knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - f**2) / (2 * L1 * L2))
-        hip_theta = np.arcsin(x / f) - np.arccos((L1**2 + f**2 - L2**2) / (2 * L1 * f))
-        return knee_theta, hip_theta
+#     Returns:
+#         A tuple (knee_theta, hip_theta) representing the joint angles.
+#     """
+#     L1 = L2 = 0.1
+#     if f > 0:
+#         knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - f**2) / (2 * L1 * L2))
+#         hip_theta = -np.arccos((L1**2 + f**2 - L2**2) / (2 * L1 * f))
+#         return knee_theta, hip_theta
+#     else:
+#         return 0,0
+
+def inverse_kinematics(height=0, displacement=0):
+    if height != 0:
+        L1 = L2 = 0.1
+        knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - height**2) / (2 * L1 * L2))
+        hip_theta = np.arcsin(displacement / height) - np.arccos((L1**2 + height**2 - L2**2) / (2 * L1 * height)) 
+
+        return hip_theta, knee_theta
     else:
-        return 0,0
+        return 0, 0
 
 # Example usage
 if __name__ == "__main__":
@@ -153,28 +165,19 @@ if __name__ == "__main__":
 
     # Set Gravity and load Plane
     p.setGravity(0, 0, -9.81)
-    planeId = p.loadURDF("plane.urdf")
+    global planeId 
+    planeID = p.loadURDF("plane.urdf")
 
     # Load the robot URDF file
-    robot_id = p.loadURDF("model/werdna_bullet.urdf", useFixedBase=False, basePosition=[0, 0, 0.02])
+    robot_id = p.loadURDF("model/werdna_stand_bullet.urdf", useFixedBase=False, basePosition=[0, 0, 0.15])
 
     # Extract joint information
     joint_info = extract_joint_info(robot_id)
-
-    # Print extracted joint information
-    print("Joint Information:")
-    for index, data in joint_info.items():
-        print(f"Joint Index: {index}, Name: {data['name']}, Position: {data['position']}, Velocity: {data['velocity']}")
-
-    joint_id, joint_info = get_joint('left_wheel_joint')
-    print(f'Joint ID {joint_id}, joint info: {joint_info}')
 
     # Run the simulation with teleop control
     while True:
         p.stepSimulation()
         teleop()
-        # _, robot_orientation = p.getBasePositionAndOrientation(robot_id)
-        # euler_angles = p.getEulerFromQuaternion(robot_orientation)
-        # pitch = np.rad2deg(euler_angles[1])
-        # print(f'Pitch: {pitch}')
+        position, orientation= p.getBasePositionAndOrientation(robot_id)
+        print(position[0])
         time.sleep(1./240.)  # Set the simulation to run at 240hz for more precise control

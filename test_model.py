@@ -1,9 +1,11 @@
 import os
 import time
 from stable_baselines3 import PPO, DQN, DDPG
+
 from utils import parser as p
 from env.werdna_balance import WerdnaEnv
 from env.werdna_stand import WerdnaStandEnv
+from env.werdna_legged import WerdnaLeggedEnv
 
 def main():
 
@@ -28,10 +30,10 @@ def main():
         env = WerdnaEnv(modelType=robot_model, render_mode='GUI')
     elif env_name == 'werdna_stand':
         env = WerdnaStandEnv(modelType=robot_model, render_mode='GUI')
+    elif env_name == 'werdna_legged':
+        env = WerdnaLeggedEnv(modelType=robot_model, render_mode='GUI')
 
-    if algo == 'DQN':
-        model=DQN.load(complete_filename)
-    elif algo == 'PPO':
+    if algo == 'PPO':
         model = PPO.load(complete_filename) 
     elif algo == 'DDPG':
         model = DDPG.load(complete_filename)

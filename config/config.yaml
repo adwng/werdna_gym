@@ -1,9 +1,9 @@
-robot_model: "model/werdna_bullet.urdf"
+robot_model: "model/werdna_stand_bullet.urdf"
 
 connect_type: "DIRECT"
 
-algo: "DDPG"
+algo: "PPO"
 
-filename: 'ddpg_werdna_stand-v1'
+filename: 'ppo_werdna_stand_balance-v2'
 
-env: 'werdna_stand'
+env: 'werdna_balance'

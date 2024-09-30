@@ -56,6 +56,9 @@ def main():
         action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
         model = DDPG("MlpPolicy", env, action_noise=action_noise, verbose=1, device=device)
         model.learn(total_timesteps=total_timesteps, log_interval=10)
+    elif algo == 'DQN':
+        model = DQN("MlpPolicy", env, verbose=1, device=device)
+        model.learn(total_timesteps=total_timesteps, log_interval=5)
 
     else:
         raise ValueError(f"Unknown algorithm: {algo}")

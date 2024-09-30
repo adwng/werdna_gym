@@ -21,15 +21,13 @@ class WerdnaStandEnv(gym.Env):
 
         # Observation space: [pitch, pitch_rate]
         self.observation_space = spaces.Box(
-            np.array([-np.pi, -np.pi, -np.inf, -np.inf]), 
-            np.array([np.pi, np.pi, np.inf, np.inf])
+            np.array([-1, -1, -1]), 
+            np.array([1, 1, 1]), dtype=np.float32
         )
 
         self.modelType = modelType
-        self.terminal_reward = 0
         self.prev_pitch = 0
         self.vt = 0
-        self.reward = 0
         self.joint_data = {}
         self.current_time_step = 0
         self.max_time_step = 3000
@@ -80,19 +78,20 @@ class WerdnaStandEnv(gym.Env):
         left_wheel_joint_id, _ = self.get_joint('left_wheel_joint')
         right_wheel_joint_id, _ = self.get_joint('right_wheel_joint')
         
-        vt = action*10
+        self.vt = action[0]*10
 
         # print(f'Speed: {vt}')
 
         # Set wheel velocities
-        p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=vt)
-        p.setJointMotorControl2(self.robotID, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=vt)        
+        p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.vt)
+        p.setJointMotorControl2(self.robotID, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.vt)        
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def reset(self, seed=None):
+
         if seed is not None:
             self.seed(seed)
 
@@ -144,18 +143,18 @@ class WerdnaStandEnv(gym.Env):
         return observations, reward, done, truncated, info
 
     def get_obs(self):
-        # Get the robot's position and orientation
-        robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
+
         self.extract_joint_info(self.robotID)
-        euler_angles = p.getEulerFromQuaternion(robot_orientation)
-        pitch = euler_angles[1]
-        pitch_rate = pitch - self.prev_pitch
-        self.prev_pitch = pitch
-        left_wheel_velocity = self.joint_data[self.get_joint('left_wheel_joint')[0]]['velocity']
-        right_wheel_velocity = self.joint_data[self.get_joint('right_wheel_joint')[0]]['velocity']
-        velocity = (left_wheel_velocity + right_wheel_velocity)/2  # Average velocity of both wheels 
-        x_position = (left_wheel_velocity + right_wheel_velocity)/0.4855
-        return np.array([pitch, pitch_rate, x_position, velocity], dtype=np.float32)
+        
+        _, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
+        
+        roll, pitch, yaw =  p.getEulerFromQuaternion(robot_orientation)
+        pitch_rate = pitch-self.prev_pitch
+        self.prev_pitch= pitch
+
+        normalized_wheel_velocity = self.vt
+
+        return np.array([pitch/np.pi, pitch_rate/np.pi, normalized_wheel_velocity], dtype=np.float32)
 
     def get_info(self):
         _, left_hip_data = self.get_joint('left_hip_joint')
@@ -180,42 +179,39 @@ class WerdnaStandEnv(gym.Env):
     def calculate_reward(self):
 
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
-        euler_angles = p.getEulerFromQuaternion(robot_orientation)
-        pitch = euler_angles[1]
+        roll, pitch, yaw = p.getEulerFromQuaternion(robot_orientation)
 
-        pitch_rate = pitch - self.prev_pitch
+        # Total reward combining posture and movement smoothness
+        reward = 1 - abs(0 - pitch)*0.01 
 
-        velocity = (self.joint_data[self.get_joint('left_wheel_joint')[0]]['velocity']
-                    + self.joint_data[self.get_joint('right_wheel_joint')[0]]['velocity']) / 2
-        
-        # Encourage the robot to stay upright and maintain stable velocity
-        reward = (1 - abs(0 - pitch))*0.01  
-        reward += min(max(pitch_rate, -0.5), 0.5) * 0.01                         
-        # print(f'Reward: {reward}')
+        # Clip the reward to ensure it stays non-negative
+        reward = max(reward, 0.0)
 
         return reward
 
     def check_terminal_state(self):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
-        euler_angles = p.getEulerFromQuaternion(robot_orientation)
-        pitch_deg = np.rad2deg(euler_angles[1])
 
-        max_distance = 0.01
-        distance_from_origin = robot_position[0]
+        roll, pitch, yaw = p.getEulerFromQuaternion(robot_orientation)
+        pitch_deg = np.rad2deg(pitch)
 
-        if abs(pitch_deg) > 45:
+        # Early in training, allow more leeway
+        if ((pitch_deg) < -50 or (pitch_deg>80)) or abs(robot_position[0])>0.5:
+                return True
+        elif self.current_time_step > self.max_time_step:
             return True
-        else:
-            return False
+            
+        return False
 
     def check_done(self):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch = euler_angles[1]
 
-        if self.current_time_step > 500 and abs(np.rad2deg(pitch) < 45):
+        if self.current_time_step > 500 and abs(np.rad2deg(pitch)) < 30:
             return True
-        return False
+        else:
+            return False
 
     def render(self, mode='human', close=False):
         pass
