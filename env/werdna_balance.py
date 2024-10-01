@@ -21,7 +21,7 @@ class WerdnaEnv(gym.Env):
         elif render_mode == 'DIRECT':
             p.connect(p.DIRECT)
 
-        self.action_space = spaces.Box(low=np.array([-1.0]), high = np.array([1.0]), dtype=np.float32)
+        self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high = np.array([1.0, 1.0]), dtype=np.float32)
 
         # Observation space: [pitch, pitch_rate, wheel velocity, x position]
         self.observation_space = spaces.Box(
@@ -63,10 +63,11 @@ class WerdnaEnv(gym.Env):
         # Get joint IDs for wheels and hips
         left_wheel_joint_id, _ = self.get_joint('left_wheel_joint')
         right_wheel_joint_id, _ = self.get_joint('right_wheel_joint')
-        # left_hip_joint_id, _ = self.get_joint('left_hip_joint')
-        # right_hip_joint_id, _ = self.get_joint('right_hip_joint')
+        left_hip_joint_id, _ = self.get_joint('left_hip_joint')
+        right_hip_joint_id, _ = self.get_joint('right_hip_joint')
         
         velocity = action[0]*10
+        self.vt = velocity
 
         self.left_wheel = velocity 
         self.right_wheel = velocity
@@ -75,10 +76,10 @@ class WerdnaEnv(gym.Env):
         p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.left_wheel)
         p.setJointMotorControl2(self.robotID, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.right_wheel)
 
-        # offset = action[1]*np.pi/6
+        offset = action[1]*np.pi/6
 
-        # p.setJointMotorControl2(self.robotID, left_hip_joint_id, p.POSITION_CONTROL, targetPosition=offset, force=5.0, velocity=2.0)
-        # p.setJointMotorControl2(self.robotID, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=offset, force=5.0, velocity=2.0)
+        p.setJointMotorControl2(self.robotID, left_hip_joint_id, p.POSITION_CONTROL, targetPosition=offset, force=5.0, maxVelocity=2.0)
+        p.setJointMotorControl2(self.robotID, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=offset, force=5.0, maxVelocity=2.0)
 
     def checkCollision(self):
 
@@ -147,7 +148,7 @@ class WerdnaEnv(gym.Env):
         pitch_rate = pitch-self.prev_pitch
         self.prev_pitch= pitch
 
-        normalized_wheel_velocity = self.vt / 5
+        normalized_wheel_velocity = self.vt / 10
 
         return np.array([pitch/np.pi, pitch_rate/np.pi, normalized_wheel_velocity, robot_position[0]], dtype=np.float32)
 
@@ -175,22 +176,36 @@ class WerdnaEnv(gym.Env):
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         roll, pitch, yaw = p.getEulerFromQuaternion(robot_orientation)
 
-        # Penalize for deviation from upright position
-        pitch_penalty = abs(pitch)   
+        # Penalize for deviation from upright position (using squared penalty for larger deviations)
+        pitch_penalty = abs(pitch) ** 2  # Stronger penalty for larger deviations
 
-        pitch_rate_penalty = abs(pitch-self.prev_pitch)
+        # Penalize for rapid changes in pitch (squared to penalize sudden large changes)
+        pitch_rate_penalty = abs(pitch - self.prev_pitch) ** 2
 
-        # Reward for maintaining upright posture
-        upright_bonus = (0.5 * pitch_penalty) 
-        upright_rate_bonus = (0.5*pitch_rate_penalty)
+        # Reward for maintaining upright posture (inverse of penalty)
+        upright_bonus = max(1 - pitch_penalty, 0.0)  # Ensure non-negative bonuss
+
+        # Reward for smooth posture transition (inverse of pitch rate penalty)
+        upright_rate_bonus = max(1 - pitch_rate_penalty, 0.0)
 
         # Total reward combining posture and movement smoothness
-        reward = 1 - upright_bonus - upright_rate_bonus
+        reward = 0.5 * (upright_bonus + upright_rate_bonus)
+
+        # Penalize collisions
+        if self.checkCollision():
+            reward -= 2  # Stronger penalty for collisions
+        else:
+            reward += 1  # Reward for not colliding
+
+        # Optional: Reward for forward movement or other tasks
+        # velocity_reward = max(self.get_velocity(), 0)  # Could reward forward motion
+        # reward += velocity_reward
 
         # Clip the reward to ensure it stays non-negative
         reward = max(reward, 0.0)
 
-        return reward*0.1
+
+        return reward
 
     def check_terminal_state(self):
 
@@ -202,7 +217,7 @@ class WerdnaEnv(gym.Env):
         pitch_deg = np.rad2deg(pitch)
 
         # Early in training, allow more leeway
-        if (pitch_deg > 60):
+        if (pitch_deg > 45):
             return True
         elif(pitch_deg<-30):
             return True
@@ -220,7 +235,7 @@ class WerdnaEnv(gym.Env):
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch = euler_angles[1]
 
-        if self.current_time_step >= self.max_time_step and abs(np.rad2deg(pitch) < 10):
+        if self.current_time_step >= 100 and abs(np.rad2deg(pitch) < 10):
             return True
         return False
     

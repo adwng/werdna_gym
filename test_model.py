@@ -1,8 +1,9 @@
 import os
 import time
-from stable_baselines3 import PPO, DQN, DDPG
-
-from utils import parser as p
+import pybullet as p  # Add pybullet for video recording
+from stable_baselines3 import PPO, DDPG
+import imageio  # Add imageio to combine images into a video
+from utils import parser as pa
 from env.werdna_balance import WerdnaEnv
 from env.werdna_stand import WerdnaStandEnv
 from env.werdna_legged import WerdnaLeggedEnv
@@ -11,13 +12,16 @@ def main():
 
     total_reward = 0
 
-    config = p.parser("config/config.yaml")
+    # Parse the configuration file
+    config = pa.parser("config/config.yaml")
 
+    # Extract settings from the config
     robot_model = config['robot_model']
     connect_type = config['connect_type']
     algo = config['algo']
-    complete_filename = os.path.join('results',config['filename'])
+    complete_filename = os.path.join('results', config['filename'])
     env_name = config['env']
+    record_video = config.get('record_video', False)  # Check if video recording is enabled
 
     # Print each variable
     print(f"Robot Model: {robot_model}")
@@ -25,7 +29,9 @@ def main():
     print(f'Algorithm Used: {algo}')
     print(f"Environment: {env_name}")
     print(f"Zip File: {complete_filename}")
+    print(f"Record Video: {record_video}")
 
+    # Initialize the environment based on the provided configuration
     if env_name == 'werdna_balance':
         env = WerdnaEnv(modelType=robot_model, render_mode='GUI')
     elif env_name == 'werdna_stand':
@@ -33,50 +39,76 @@ def main():
     elif env_name == 'werdna_legged':
         env = WerdnaLeggedEnv(modelType=robot_model, render_mode='GUI')
 
+    # Load the trained model
     if algo == 'PPO':
-        model = PPO.load(complete_filename) 
+        model = PPO.load(complete_filename)
     elif algo == 'DDPG':
         model = DDPG.load(complete_filename)
 
     # Set the environment for the model
     model.set_env(env)
 
-    # Number of episodes to test
-    # num_episodes = 3000
+    if record_video:
+        # Create a folder to save the video and images
+        video_folder = "video"
+        image_folder = os.path.join(video_folder, "frames")
+        if not os.path.exists(video_folder):
+            os.makedirs(video_folder)
+        if not os.path.exists(image_folder):
+            os.makedirs(image_folder)
 
-    # total_reward = 0
-
-    # obs ,_= env.reset()  # Reset the environment
-
-    # for episode in range(num_episodes):
-        
-    #     action, _ = model.predict(obs)  # Get the action from the model
-    #     obs, reward, truncated, terminated, info = env.step(action)  # Take the action in the environment
-    #     total_reward += reward  # Accumulate reward
-
-    # print(f"Episode {episode + 1} finished with total reward: {total_reward}")
-
-    # # Close the environment if it supports closing
-    # env.close()
-
+    # Keep running episodes
+    episode_num = 0
     while 1:
         frame = 0
         terminated = False
-        obs, _ = env.reset() # Reset the environment
+        obs, _ = env.reset()  # Reset the environment
+        total_reward = 0
 
-        while not (terminated):
+        # Start video recording by saving frames if record_video is true
+        episode_num += 1
+        frame_filenames = []
 
-            time.sleep(1./60.)
+        while not terminated:
+            time.sleep(1. / 60.)
 
+            # Get the predicted action from the model
             action, _ = model.predict(obs)
+
+            # Take the action in the environment
             obs, reward, truncated, terminated, info = env.step(action)
 
             total_reward += reward
             frame += 1
 
-            print(f"Episode {frame} finished with total reward: {total_reward}")
+            if record_video:
+                # Capture the frame from the PyBullet window
+                width, height, rgb_img, _, _ = p.getCameraImage(640, 480)  # Get frame from camera
+                frame_filename = os.path.join(image_folder, f"episode_{episode_num}_frame_{frame}.png")
+                frame_filenames.append(frame_filename)
 
+                # Save the frame
+                imageio.imwrite(frame_filename, rgb_img)
+
+                print(f"Frame {frame} saved, total reward so far: {total_reward}")
+
+        if record_video:
+            # After the episode, combine the frames into a video
+            video_filename = f"{complete_filename}.mp4"  # Name video as the complete_filename
+            with imageio.get_writer(video_filename, fps=60) as video:
+                for frame_filename in frame_filenames:
+                    img = imageio.imread(frame_filename)
+                    video.append_data(img)
+
+            print(f"Episode {episode_num} finished, total reward: {total_reward}")
+            print(f"Video saved to {video_filename}")
+
+            # Clean up frame files after video creation
+            for frame_filename in frame_filenames:
+                os.remove(frame_filename)
+
+        # Close the environment
         env.close()
 
-if __name__ =="__main__":
+if __name__ == "__main__":
     main()

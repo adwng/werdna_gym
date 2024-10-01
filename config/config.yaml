@@ -4,6 +4,8 @@ connect_type: "DIRECT"
 
 algo: "PPO"
 
-filename: 'ppo_werdna_stand_balance-v2'
+filename: 'ppo_werdna_stand_balance-v5'
 
 env: 'werdna_balance'
+
+record_video: false
