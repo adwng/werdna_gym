@@ -164,8 +164,8 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.0855"/>
-        <!-- <cylinder radius="${wheel_radius}" length="${wheel_length}"/> -->
+        <!-- <sphere radius="0.0855"/> -->
+        <cylinder radius="0.0885" length="0.045"/>
       </geometry>
     </collision>
     <inertial>
@@ -185,8 +185,8 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.0855"/>
-        <!-- <cylinder radius="${wheel_radius}" length="${wheel_length}"/> -->
+        <!-- <sphere radius="0.0855"/> -->
+        <cylinder radius="0.0885" length="0.045"/>
       </geometry>
     </collision>
     <inertial>

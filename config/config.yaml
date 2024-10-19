@@ -6,6 +6,10 @@ algo: "PPO"
 
 filename: 'ppo_werdna_stand_balance-v5'
 
-env: 'werdna_balance'
+env: 'werdna_balance_v2'
 
 record_video: false
+
+timesteps: 300000
+
+tb_log_name: "0.65Z, 0.2X, 0.15V: werdna_stand"

@@ -1,25 +1,26 @@
 import os
 import time
 import pybullet as p  # Add pybullet for video recording
-from stable_baselines3 import PPO, DDPG
+from stable_baselines3 import PPO
 import imageio  # Add imageio to combine images into a video
 from utils import parser as pa
 from env.werdna_balance import WerdnaEnv
-from env.werdna_stand import WerdnaStandEnv
-from env.werdna_legged import WerdnaLeggedEnv
+from env.werdna_balance_v2 import Werdna2Env
+from env.werdna_balance_v3 import Werdna3Env
 
 def main():
 
     total_reward = 0
 
     # Parse the configuration file
-    config = pa.parser("config/config.yaml")
+    config = pa.parser("config/config2.yaml")
 
     # Extract settings from the config
     robot_model = config['robot_model']
     connect_type = config['connect_type']
     algo = config['algo']
-    complete_filename = os.path.join('results', config['filename'])
+    tb_log_name = config['tb_log_name']
+    complete_filename = os.path.join('results', f'{tb_log_name}', config['filename'])
     env_name = config['env']
     record_video = config.get('record_video', False)  # Check if video recording is enabled
 
@@ -34,16 +35,14 @@ def main():
     # Initialize the environment based on the provided configuration
     if env_name == 'werdna_balance':
         env = WerdnaEnv(modelType=robot_model, render_mode='GUI')
-    elif env_name == 'werdna_stand':
-        env = WerdnaStandEnv(modelType=robot_model, render_mode='GUI')
-    elif env_name == 'werdna_legged':
-        env = WerdnaLeggedEnv(modelType=robot_model, render_mode='GUI')
+    elif env_name == 'werdna_balance_v2':
+        env =  Werdna2Env(modelType=robot_model, render_mode='GUI')
+    elif env_name == 'werdna_balance_v3':
+        env = Werdna3Env(modelType=robot_model, render_mode="GUI")
 
     # Load the trained model
     if algo == 'PPO':
         model = PPO.load(complete_filename)
-    elif algo == 'DDPG':
-        model = DDPG.load(complete_filename)
 
     # Set the environment for the model
     model.set_env(env)
@@ -69,7 +68,7 @@ def main():
         episode_num += 1
         frame_filenames = []
 
-        while not terminated:
+        while not terminated or truncated:
             time.sleep(1. / 60.)
 
             # Get the predicted action from the model
@@ -83,7 +82,7 @@ def main():
 
             if record_video:
                 # Capture the frame from the PyBullet window
-                width, height, rgb_img, _, _ = p.getCameraImage(640, 480)  # Get frame from camera
+                width, height, rgb_img, _, _ = p.getCameraImage(1920, 1080)  # Get frame from camera
                 frame_filename = os.path.join(image_folder, f"episode_{episode_num}_frame_{frame}.png")
                 frame_filenames.append(frame_filename)
 

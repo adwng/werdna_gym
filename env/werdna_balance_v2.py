@@ -1,36 +1,43 @@
 import os
-import math
+import time
+
 import pybullet as p
 import pybullet_data
+
 import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.utils import seeding
+
+from utils.collision_detector import CollisionDetector
+
 import numpy as np
 
-class WerdnaStandEnv(gym.Env):
-    metadata = {'render.modes': ['human', 'rgb_array'], 'video.frames_per_second': 50}
+class Werdna2Env(gym.Env):
 
     def __init__(self, render_mode="GUI", modelType="model/werdna_bullet.urdf"):
-
+        super().__init__()
         if render_mode == 'GUI':
             p.connect(p.GUI)
         elif render_mode == 'DIRECT':
             p.connect(p.DIRECT)
 
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high = np.array([1.0, 1.0]), dtype=np.float32)
 
-        # Observation space: [pitch, pitch_rate]
+        # Observation space: [pitch, pitch_rate, wheel velocity, x position]
         self.observation_space = spaces.Box(
-            np.array([-1, -1, -1]), 
-            np.array([1, 1, 1]), dtype=np.float32
+            np.array([-np.inf, -np.inf, -np.inf, -np.inf]), 
+            np.array([np.inf, np.inf, np.inf, np.inf])
         )
 
         self.modelType = modelType
-        self.prev_pitch = 0
-        self.vt = 0
+        self.max_time_step = 1500
         self.joint_data = {}
+        self.wheel_radius = 0.085
+
+        self.prev_pitch = 0
+        self.left_wheel = 0
+        self.right_wheel = 0
         self.current_time_step = 0
-        self.max_time_step = 3000
 
         self.seed()
 
@@ -54,37 +61,39 @@ class WerdnaStandEnv(gym.Env):
                 return joint_id, data
         return None  # Return None if the joint with the specified name is not found
 
-    def inverse_kinematics(self, f=0, x=0):
-        """
-        Performs inverse kinematics calculations to get knee and hip angles.
-        
-        Args:
-            f: The target foot position (height).
-            x: The x-axis displacement (currently unused).
-            
-        Returns:
-            A tuple (knee_theta, hip_theta) representing the joint angles.
-        """
-        L1 = L2 = 0.1
-        if f > 0:
-            knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - f**2) / (2 * L1 * L2))
-            hip_theta = np.arcsin(x / f) - np.arccos((L1**2 + f**2 - L2**2) / (2 * L1 * f))
-            return knee_theta, hip_theta
-        else:
-            return 0,0
-
     def moveRobot(self, action):
         # Get joint IDs for wheels and hips
         left_wheel_joint_id, _ = self.get_joint('left_wheel_joint')
         right_wheel_joint_id, _ = self.get_joint('right_wheel_joint')
-        
-        self.vt = action[0]*10
+        left_hip_joint_id, _ = self.get_joint('left_hip_joint')
+        right_hip_joint_id, _ = self.get_joint('right_hip_joint')
 
-        # print(f'Speed: {vt}')
+        self.left_wheel = action[0]*10
+        self.right_wheel = action[0]*10
 
         # Set wheel velocities
-        p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.vt)
-        p.setJointMotorControl2(self.robotID, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.vt)        
+        p.setJointMotorControl2(self.robotID, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.left_wheel)
+        p.setJointMotorControl2(self.robotID, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=self.right_wheel)
+
+        offset = action[1]*np.pi/6
+
+        p.setJointMotorControl2(self.robotID, left_hip_joint_id, p.POSITION_CONTROL, targetPosition=offset, force=10.0, maxVelocity=2.0)
+        p.setJointMotorControl2(self.robotID, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=offset, force=10.0, maxVelocity=2.0)
+
+    def checkCollision(self):
+
+        ground = self.planeid
+        left_hip = (self.robotID, "left_hip_link")
+        left_knee = (self.robotID, "left_knee_link")
+        right_hip = (self.robotID, "right_hip_link")
+        right_knee = (self.robotID, "right_knee_link")
+
+        col_detector = CollisionDetector(
+            self.planeid,
+            [(left_hip, ground), (left_knee, ground), (right_hip, ground), (right_knee, ground)],
+        )
+
+        return col_detector.in_collision(0.001)
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -96,35 +105,21 @@ class WerdnaStandEnv(gym.Env):
             self.seed(seed)
 
         p.resetSimulation()
+        p.setTimeStep(0.01)
         p.setGravity(0, 0, -9.81)
-        p.setTimeStep(0.02)
-
-        self.current_time_step = 0
-        self.prev_pitch = 0
-        self.vt = 0
 
         robotPath = pybullet_data.getDataPath()
         self.planeid = p.loadURDF(os.path.join(robotPath, "plane.urdf"), basePosition=[0, 0, 0])
-        self.robotID = p.loadURDF(self.modelType, basePosition=[0, 0, 0.0855])
+        self.robotID = p.loadURDF(self.modelType, basePosition=[0, 0, 0.15])
+        
+        self.current_time_step = 0
+        self.prev_pitch = 0
+        self.left_wheel = 0
+        self.right_wheel = 0
 
         observation = self.get_obs()
         info = self.get_info()
-
-        left_hip_joint_id, _ = self.get_joint('left_hip_joint')
-        left_knee_joint_id, _ = self.get_joint('left_knee_joint')
-        right_hip_joint_id, _ = self.get_joint('right_hip_joint')
-        right_knee_joint_id, _ = self.get_joint('right_knee_joint')
-
-        # Calculate knee and hip angles using inverse kinematics
-        left_knee, left_hip = self.inverse_kinematics(0.1, 0)
-        right_knee, right_hip = self.inverse_kinematics(0.1, 0)
-
-        # Set knee and hip joint positions
-        p.setJointMotorControl2(self.robotID, left_knee_joint_id, p.POSITION_CONTROL, targetPosition=left_knee, force = 10.0, maxVelocity = 2.0)
-        p.setJointMotorControl2(self.robotID, left_hip_joint_id, p.POSITION_CONTROL, targetPosition=left_hip, force = 10.0, maxVelocity = 2.0)
-        p.setJointMotorControl2(self.robotID, right_knee_joint_id, p.POSITION_CONTROL, targetPosition=right_knee, force = 10.0, maxVelocity = 2.0)
-        p.setJointMotorControl2(self.robotID, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=right_hip, force = 10.0, maxVelocity = 2.0)
-
+        
         return observation, info
 
     def step(self, action):
@@ -144,17 +139,30 @@ class WerdnaStandEnv(gym.Env):
 
     def get_obs(self):
 
+        # Extract Joint Info
         self.extract_joint_info(self.robotID)
         
-        _, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
+        # Extract robot position, orientation, roll, pitch, and yaw
+        robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
         
         roll, pitch, yaw =  p.getEulerFromQuaternion(robot_orientation)
+        
         pitch_rate = pitch-self.prev_pitch
         self.prev_pitch= pitch
 
-        normalized_wheel_velocity = self.vt
+        # Get current's position and velocity
+        _, left_wheel_joint_info = self.get_joint('left_wheel_joint')
+        left_wheel_joint_velocity = left_wheel_joint_info['velocity']
 
-        return np.array([pitch/np.pi, pitch_rate/np.pi, normalized_wheel_velocity], dtype=np.float32)
+        _, right_wheel_joint_info = self.get_joint('right_wheel_joint')
+        right_wheel_joint_velocity = right_wheel_joint_info['velocity']
+
+        # Calculate Pitch, Pitch Rate,Position and velocity
+        position = robot_position[0]
+
+        velocity = (left_wheel_joint_velocity + right_wheel_joint_velocity)/2
+
+        return np.array([pitch, pitch_rate, position, velocity], dtype=np.float32)
 
     def get_info(self):
         _, left_hip_data = self.get_joint('left_hip_joint')
@@ -175,30 +183,61 @@ class WerdnaStandEnv(gym.Env):
             'right_knee_position': right_knee_position
         }
 
-
     def calculate_reward(self):
 
+        position = 0
+
+        # Get position, orientation, roll, pitch, and yaw
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
+        x,y,z = robot_position
         roll, pitch, yaw = p.getEulerFromQuaternion(robot_orientation)
 
-        # Total reward combining posture and movement smoothness
-        reward = 1 - abs(0 - pitch)*0.01 
+        # Get current's position and velocity
+        _, left_wheel_joint_info = self.get_joint('left_wheel_joint')
+        left_wheel_joint_velocity = left_wheel_joint_info['velocity']
 
-        # Clip the reward to ensure it stays non-negative
-        reward = max(reward, 0.0)
+        _, right_wheel_joint_info = self.get_joint('right_wheel_joint')
+        right_wheel_joint_velocity = right_wheel_joint_info['velocity']
 
+        # Get z position based on pitch
+        z_position = z*np.sin(pitch)
+        z_position_reward = np.exp(-((z_position / 0.05) ** 2))
+
+        # Get x position based on delta
+        x_position = robot_position[0]
+
+        x_position_reward = np.exp(-((x_position / 0.05) ** 2))
+
+        # Get velocity based on delta
+        velocity = (left_wheel_joint_velocity + right_wheel_joint_velocity)/2  
+
+        velocity = z*velocity*np.cos(pitch)
+        
+        velocity_reward = -abs(velocity)
+
+        # Estimate weights for accounting for pitch using z_position, and linear position using x_position, add 0.1 for every step to encourage standstill
+        reward = (0.65*z_position_reward) + (0.2*x_position_reward) + (0.15*velocity_reward) + 0.1
         return reward
 
     def check_terminal_state(self):
+
         robot_position, robot_orientation = p.getBasePositionAndOrientation(self.robotID)
+
+        # print(robot_position[0])
 
         roll, pitch, yaw = p.getEulerFromQuaternion(robot_orientation)
         pitch_deg = np.rad2deg(pitch)
 
         # Early in training, allow more leeway
-        if ((pitch_deg) < -50 or (pitch_deg>80)) or abs(robot_position[0])>0.5:
-                return True
+        if (pitch_deg > 25):
+            return True
+        elif(pitch_deg<-25):
+            return True
         elif self.current_time_step > self.max_time_step:
+            return True
+        elif abs(robot_position[0])> 1.0:
+            return True
+        elif self.checkCollision():
             return True
             
         return False
@@ -208,13 +247,12 @@ class WerdnaStandEnv(gym.Env):
         euler_angles = p.getEulerFromQuaternion(robot_orientation)
         pitch = euler_angles[1]
 
-        if self.current_time_step > 500 and abs(np.rad2deg(pitch)) < 30:
+        if self.current_time_step > self.max_time_step and abs(np.rad2deg(pitch) < 15):
             return True
-        else:
-            return False
-
+        return False
+    
     def render(self, mode='human', close=False):
         pass
-    
+
     def close(self):
         p.disconnect()

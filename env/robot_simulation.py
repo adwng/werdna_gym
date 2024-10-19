@@ -48,12 +48,12 @@ def extract_joint_info(robot_id):
 def teleop():
     left_wheel_joint_id, left_wheel_joint_info = get_joint('left_wheel_joint')
     right_wheel_joint_id, right_wheel_joint_info = get_joint('right_wheel_joint')
-    left_hip_joint_id, left_hip_joint_info = get_joint('left_hip_joint')
-    left_knee_joint_id, left_knee_joint_info = get_joint('left_knee_joint')
-    right_hip_joint_id, right_hip_joint_info = get_joint('right_hip_joint')
-    right_knee_joint_id, right_knee_joint_info = get_joint('right_knee_joint')
+    left_hip_joint_id, left_hip_joint_info = get_joint('left_hip_motor_joint')
+    left_knee_joint_id, left_knee_joint_info = get_joint('left_knee_motor_joint')
+    right_hip_joint_id, right_hip_joint_info = get_joint('right_hip_motor_joint')
+    right_knee_joint_id, right_knee_joint_info = get_joint('right_knee_motor_joint')
 
-    max_wheel_velocity = 10.0
+    max_wheel_velocity = 10
     max_height = 0.10
     max_displacement = 0.05
 
@@ -86,70 +86,49 @@ def teleop():
         right_leg_position -= 0.001
         left_leg_position -= 0.001
     if ord('o') in keys and keys[ord('o')] & p.KEY_IS_DOWN:
-        right_leg_displacement += 0.001
-        left_leg_displacement += 0.001
+        right_leg_displacement += 0.01
+        left_leg_displacement += 0.01
     elif ord('l') in keys and keys[ord('l')] & p.KEY_IS_DOWN:  # Changed from ':' to ';'
-        right_leg_displacement -= 0.001
-        left_leg_displacement -= 0.001
+        right_leg_displacement -= 0.01
+        left_leg_displacement -= 0.01
 
-    if left_leg_position > max_height:
-        left_leg_position = max_height
-    if right_leg_position > max_height:
-        right_leg_position = max_height
+    left_leg_position = np.clip(left_leg_position, 0, 0.1)
+    right_leg_position = np.clip(right_leg_position, 0, 0.1)
+    left_leg_displacement = np.clip(left_leg_displacement, -0.05, 0.05)
+    right_leg_displacement = np.clip(right_leg_displacement, -0.05, 0.05)
 
-    if (left_leg_displacement > max_displacement):
-        left_leg_displacement = max_displacement
-    elif (left_leg_displacement < -max_displacement):
-        left_leg_displacement = -max_displacement
-
-    if (right_leg_displacement > max_displacement):
-        right_leg_displacement = max_displacement
-    elif (right_leg_displacement < -max_displacement):
-        right_leg_displacement = -max_displacement
+    # Calculate knee and hip angles using inverse kinematics
+    left_hip, left_knee = inverse_kinematics(left_leg_displacement, left_leg_position)
+    right_hip, right_knee = inverse_kinematics(right_leg_displacement, right_leg_position)
 
     # Set wheel velocities
     p.setJointMotorControl2(robot_id, left_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=left_wheel_velocity)
     p.setJointMotorControl2(robot_id, right_wheel_joint_id, p.VELOCITY_CONTROL, targetVelocity=right_wheel_velocity)
-
-    # Calculate knee and hip angles using inverse kinematics
-    left_hip, left_knee = inverse_kinematics(left_leg_position, left_leg_displacement)
-    right_hip, right_knee = inverse_kinematics(right_leg_position, right_leg_displacement)
 
     # Set knee and hip joint positions
     p.setJointMotorControl2(robot_id, left_knee_joint_id, p.POSITION_CONTROL, targetPosition=left_knee, force = 10.0, maxVelocity = 2.0)
     p.setJointMotorControl2(robot_id, left_hip_joint_id, p.POSITION_CONTROL, targetPosition=left_hip, force = 10.0, maxVelocity = 2.0)
     p.setJointMotorControl2(robot_id, right_knee_joint_id, p.POSITION_CONTROL, targetPosition=right_knee, force = 10.0, maxVelocity = 2.0)
     p.setJointMotorControl2(robot_id, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=right_hip, force = 10.0, maxVelocity = 2.0)
-    
 
-# def inverse_kinematics(f=0, x=0):
-#     """
-#     Performs inverse kinematics calculations to get knee and hip angles.
     
-#     Args:
-#         f: The target foot position (height).
-#         x: The x-axis displacement (currently unused).
-        
-#     Returns:
-#         A tuple (knee_theta, hip_theta) representing the joint angles.
-#     """
-#     L1 = L2 = 0.1
-#     if f > 0:
-#         knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - f**2) / (2 * L1 * L2))
-#         hip_theta = -np.arccos((L1**2 + f**2 - L2**2) / (2 * L1 * f))
-#         return knee_theta, hip_theta
-#     else:
-#         return 0,0
-
-def inverse_kinematics(height=0, displacement=0):
-    if height != 0:
+def inverse_kinematics(x=0, y=0):
+    if y > 0:
         L1 = L2 = 0.1
-        knee_theta = (np.pi / 3) + np.arccos((L1**2 + L2**2 - height**2) / (2 * L1 * L2))
-        hip_theta = np.arcsin(displacement / height) - np.arccos((L1**2 + height**2 - L2**2) / (2 * L1 * height)) 
+
+        height = np.sqrt(x**2 + y**2)
+
+        knee_theta = np.arccos(
+            (L1*L1 + L2*L2 - height*height)/
+            ((2*L1 *L2))
+        )
+
+        hip_theta = np.arcsin(-x/y) + np.arccos((L1*L1 + height*height - L2* L2)/(2*L2*height))
 
         return hip_theta, knee_theta
     else:
         return 0, 0
+
 
 # Example usage
 if __name__ == "__main__":
@@ -162,6 +141,7 @@ if __name__ == "__main__":
     # Connect to PyBullet and create a GUI window
     p.connect(p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
+    p.setTimeStep(0.01)
 
     # Set Gravity and load Plane
     p.setGravity(0, 0, -9.81)
@@ -169,15 +149,47 @@ if __name__ == "__main__":
     planeID = p.loadURDF("plane.urdf")
 
     # Load the robot URDF file
-    robot_id = p.loadURDF("model/werdna_stand_bullet.urdf", useFixedBase=False, basePosition=[0, 0, 0.15])
+    robot_id = p.loadURDF("model/werdna_v2_bullet.urdf", useFixedBase=False, basePosition=[0, 0, 0.21])
 
     # Extract joint information
     joint_info = extract_joint_info(robot_id)
 
+    # Define the range for hip and knee angles
+    hip_range = np.arange(-0.05, 0.05, 0.01)  # Adjusted the upper limit
+    knee_range = np.arange(0, 0.1, 0.01)  # Adjusted the upper limit
+
     # Run the simulation with teleop control
     while True:
+        time.sleep(1./240.)
         p.stepSimulation()
         teleop()
-        position, orientation= p.getBasePositionAndOrientation(robot_id)
-        print(position[0])
-        time.sleep(1./240.)  # Set the simulation to run at 240hz for more precise control
+        joint_info = extract_joint_info(robot_id)
+
+
+        # _, left_wheel_joint_info = get_joint('left_wheel_joint')
+        # left_wheel_joint_velocity = left_wheel_joint_info['velocity']
+
+        # _, right_wheel_joint_info = get_joint('right_wheel_joint')
+        # right_wheel_joint_velocity = right_wheel_joint_info['velocity']
+
+        # print(f"Left Wheel Speed:{left_wheel_joint_info}, Right Wheel Speed: {right_wheel_joint_info}")
+
+        # for knee_angle in knee_range:
+        #     for hip_angle in hip_range:
+        #         hip, knee = inverse_kinematics(hip_angle, knee_angle)
+
+        #         left_hip_joint_id, left_hip_joint_info = get_joint('left_hip_joint')
+        #         left_knee_joint_id, left_knee_joint_info = get_joint('left_knee_joint')
+        #         right_hip_joint_id, right_hip_joint_info = get_joint('right_hip_joint')
+        #         right_knee_joint_id, right_hip_joint_info = get_joint('right_knee_joint')
+
+        #         # Set knee and hip joint positions
+        #         p.setJointMotorControl2(robot_id, left_knee_joint_id, p.POSITION_CONTROL, targetPosition=knee, force = 10.0, maxVelocity = 2.0)
+        #         p.setJointMotorControl2(robot_id, left_hip_joint_id, p.POSITION_CONTROL, targetPosition=hip, force = 10.0, maxVelocity = 2.0)
+        #         p.setJointMotorControl2(robot_id, right_knee_joint_id, p.POSITION_CONTROL, targetPosition=knee, force = 10.0, maxVelocity = 2.0)
+        #         p.setJointMotorControl2(robot_id, right_hip_joint_id, p.POSITION_CONTROL, targetPosition=hip, force = 10.0, maxVelocity = 2.0)
+
+            
+
+        # position, orientation= p.getBasePositionAndOrientation(robot_id)
+        # print(position[0])

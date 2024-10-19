@@ -2,21 +2,22 @@ import os
 import torch
 import numpy as np
 
-from stable_baselines3 import PPO, DDPG, DQN
+from stable_baselines3 import PPO
 from utils import parser as p
 from env.werdna_balance import WerdnaEnv
-from env.werdna_stand import WerdnaStandEnv
-from env.werdna_legged import WerdnaLeggedEnv
+from env.werdna_balance_v2 import Werdna2Env
+from env.werdna_balance_v3 import Werdna3Env
 
 def main():
-    config = p.parser("config/config.yaml")
+    config = p.parser("config/config2.yaml")
 
     robot_model = config['robot_model']
     connect_type = config['connect_type']
     algo = config['algo']
     filename = config['filename']
     env_name = config['env']
-    total_timesteps =  1000000  
+    total_timesteps =  config['timesteps']
+    tb_log_name = config['tb_log_name']
 
     # Print each variable
     print(f"Robot Model: {robot_model}")
@@ -24,6 +25,7 @@ def main():
     print(f'Algorithm Used: {algo}')
     print(f"Zip File: {filename}")
     print(f"Environment: {env_name}")
+    print(f"Total Timesteps{total_timesteps}")
 
     # Specify the device as "cuda" (GPU) if available, or fall back to "cpu"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -37,34 +39,30 @@ def main():
     # Choose the environment
     if env_name == 'werdna_balance':
         env = WerdnaEnv(modelType=robot_model, render_mode=connect_type)
-    elif env_name == 'werdna_stand':
-        env = WerdnaStandEnv(modelType=robot_model, render_mode=connect_type)
-    elif env_name == 'werdna_legged':
-        env = WerdnaLeggedEnv(modelType=robot_model, render_mode=connect_type)
+    elif env_name == 'werdna_balance_v2':   
+        env = Werdna2Env(modelType=robot_model, render_mode=connect_type)
+    elif env_name == "werdna_balance_v3":
+        env = Werdna3Env(modelType=robot_model, render_mode=connect_type)
     else:
         raise ValueError(f"Unknown environment: {env_name}")
 
     # Algorithm selection
 
     if algo == 'PPO':
-        model = PPO("MlpPolicy", env, verbose=1, device=device)
-        model.learn(total_timesteps=total_timesteps)
-
-    elif algo == 'DDPG':
-        from stable_baselines3.common.noise import NormalActionNoise
-        n_actions = env.action_space.shape[-1]
-        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-        model = DDPG("MlpPolicy", env, action_noise=action_noise, verbose=1, device=device)
-        model.learn(total_timesteps=total_timesteps, log_interval=10)
-    elif algo == 'DQN':
-        model = DQN("MlpPolicy", env, verbose=1, device=device)
-        model.learn(total_timesteps=total_timesteps, log_interval=5)
-
+        model = PPO("MlpPolicy", 
+                    env, 
+                    verbose=1,
+                    device=device,
+                    ent_coef=0.001,
+                    # use_sde=True,
+                    tensorboard_log='logs/ppo_werdna_v2_tensorboard'
+                )
+        model.learn(total_timesteps=total_timesteps, tb_log_name=tb_log_name)
     else:
         raise ValueError(f"Unknown algorithm: {algo}")
 
     # Create the results directory if it doesn't exist
-    results_dir = "results"
+    results_dir = os.path.join("results", tb_log_name)
     os.makedirs(results_dir, exist_ok=True)
 
     # Save the model
