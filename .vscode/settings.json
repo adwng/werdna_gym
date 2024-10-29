@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "ros.distro": "humble",
     "python.autoComplete.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
@@ -8,4 +9,7 @@
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ]
+=======
+    "ros.distro": "humble"
+>>>>>>> ae14b920fc31088aa23e05c19c5970a55d75e873
 }

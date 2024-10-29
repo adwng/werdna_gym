@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    
+    <!-- joint's limits -->
+    <xacro:property name="high_limit" value="3.142"/>
+    <xacro:property name="low_limit" value="-3.142"/>
+    <xacro:property name="velocity" value="10.0"/>
+    <xacro:property name="effort" value="10.0"/>
+
+    <!-- joint's dynamics -->
+    <xacro:property name="use_dynamics" value="true"/>
+    <xacro:macro name="hip_joint_dynamics">
+        <dynamics damping='0.1' friction="1000"/>
+    </xacro:macro>
+    <xacro:macro name="knee_joint_dynamics">
+        <dynamics damping='1.0' friction="100"/>
+    </xacro:macro>
+
+    <xacro:property name="wheel_radius" value="0.0855"/>
+    <xacro:property name="wheel_lenght" value="0.045"/>
+
+    <material name="white">
+        <color rgba="1 1 1 1" />
+    </material>
+
+    <material name="orange">
+        <color rgba="1 0.3 0.1 1"/>
+    </material>
+
+    <material name="blue">
+        <color rgba="0.2 0.2 1 1"/>
+    </material>
+
+    <material name="black">
+        <color rgba="0 0 0 1"/>
+    </material>
+
+    <material name="red">
+        <color rgba="1 0 0 1"/>
+    </material>
+
+    <xacro:property name="wheel_radius" value="0.0855"/>
+    <xacro:property name="wheel_length" value="0.045"/>
+
+    <xacro:property name="motor_radius" value="0.046"/>
+    <xacro:property name="motor_thickness" value="0.0285"/>
+    
+    <!-- Width, length, height = x,y,z -->
+    <xacro:property name="chassis_length" value="0.2"/>
+    <xacro:property name="chassis_width" value="0.15"/> 
+    <xacro:property name="chassis_height" value="0.12"/> 
+
+    <xacro:property name="imu_length" value="0.01"/>
+    <xacro:property name="imu_width" value="0.01"/> 
+    <xacro:property name="imu_height" value="0.01"/> 
+
+    <xacro:property name="rod_length" value="0.01"/>
+    <xacro:property name="rod_width" value="0.01"/> 
+    <xacro:property name="rod_height" value="0.2"/>
+
+    <xacro:property name="chassis_mass" value="3.0"/>
+    <xacro:property name="rod_mass" value="0.2"/>
+    <xacro:property name="wheel_mass" value="2.2"/>
+    <xacro:property name="imu_mass" value="0.01"/>
+    <xacro:property name="motor_mass" value="0.336"/>
+    
+
+</robot>

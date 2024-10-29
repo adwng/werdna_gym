@@ -1,0 +1,15 @@
+robot_model: "model/werdna_stand_bullet.urdf"
+
+connect_type: "DIRECT"
+
+algo: "PPO"
+
+filename: 'ppo_werdna_stand_balance-v5'
+
+env: 'werdna_balance_v2'
+
+record_video: false
+
+timesteps: 300000
+
+tb_log_name: "0.65Z, 0.2X, 0.15V: werdna_stand"
